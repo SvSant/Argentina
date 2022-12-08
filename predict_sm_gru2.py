@@ -24,9 +24,9 @@ class G:
     SPLIT_FRAC = 0.85
     SHUFFLE_BUFFER = 20
     BATCH_SIZE = 30
-    GRU_WIDTH = 64
+    GRU_WIDTH = 128
     LEARNING_RATE = 1e-4
-    EPOCHS = 150
+    EPOCHS = 200
     DROPOUT = 0.3
     LAYERS = 4_2
 
@@ -38,7 +38,7 @@ def normalize(data):
 
     comb = pd.concat([mean, std], axis=1)
     comb.columns=['mean', 'std']
-    comb.to_excel('data/norm.xlsx', sheet_name='mean_std')
+    comb.to_excel('data/norm_abs.xlsx', sheet_name='mean_std')
 
     # get column names
     col = data.columns
@@ -51,7 +51,7 @@ def normalize(data):
 # read data function
 def parse_data_from_file(filename):
     # load data
-    df = pd.read_excel(filename, sheet_name='delta')
+    df = pd.read_excel(filename, sheet_name='Sheet1')
 
     # # remove period with incorrect data
     # df = df[~(df['datum'] > '2020-10-03')]
@@ -59,6 +59,8 @@ def parse_data_from_file(filename):
     # set datum to index
     df.set_index('weather_date', inplace=True)
 
+    df = df.drop(columns=['soil_15']).dropna()
+    
     # # sort data from past to present
     # df = df.iloc[::-1]
 
@@ -132,9 +134,9 @@ def train_step(X,y_true):
         y_pred_d = model(X)
         y_pred = tf.cumsum(y_pred_d, axis=1)
 
-        loss_value = tf.compat.v1.losses.huber_loss(y_true, y_pred)
+        # loss_value = tf.compat.v1.losses.huber_loss(y_true, y_pred)
         # loss_value = tf.keras.metrics.mean_squared_error(y_true, y_pred)
-        # loss_value = tf.keras.metrics.mean_absolute_error(y_true, y_pred)
+        loss_value = tf.keras.metrics.mean_absolute_error(y_true, y_pred)
 
 
     # calculate gradient with respect to weights of the network
@@ -143,7 +145,7 @@ def train_step(X,y_true):
     # update model
     optimizer.apply_gradients(zip(grads, model.trainable_weights))
 
-    # loss_value = tf.reduce_sum(loss_value)/len(loss_value)
+    loss_value = tf.reduce_sum(loss_value)/len(loss_value)
 
     return loss_value
 
@@ -156,11 +158,11 @@ def test_step(X,y_true):
     y_pred = tf.cast(y_pred, dtype=tf.float32)
     y_true = tf.cast(y_true, dtype=tf.float32)
 
-    loss_value = tf.compat.v1.losses.huber_loss(y_true, y_pred)
+    # loss_value = tf.compat.v1.losses.huber_loss(y_true, y_pred)
     # loss_value = tf.keras.metrics.mean_squared_error(y_true, y_pred)
-    # loss_value = tf.keras.metrics.mean_absolute_error(y_true, y_pred)
+    loss_value = tf.keras.metrics.mean_absolute_error(y_true, y_pred)
 
-    # loss_value = tf.reduce_sum(loss_value)/len(loss_value)
+    loss_value = tf.reduce_sum(loss_value)/len(loss_value)
 
     return y_pred, loss_value
 
@@ -242,12 +244,14 @@ for epoch in range(1,G.EPOCHS+1):
     train_loss_plot.append(train_loss)
     test_loss_plot.append(test_loss)
 
-    np.savetxt('gru_sm/loss_history/train_loss_'+save_title+'.csv', train_loss_plot)
-    np.savetxt('gru_sm/loss_history/test_loss_'+save_title+'.csv', test_loss_plot)
+    np.savetxt('gru_abs_in/loss_history/train_loss_'+save_title+'.csv', train_loss_plot)
+    np.savetxt('gru_abs_in/loss_history/test_loss_'+save_title+'.csv', test_loss_plot)
 
 # get predictions
-y_pred_test = model(X_test)
-y_pred_all = model(X)
+y_pred_test_d = model(X_test)
+y_pred_test = tf.cumsum(y_pred_test_d, axis=1)
+
+# y_pred_all = model(X)
 
 # get mse and mea
 mse, mae, r2, mse_all, mae_all, r2_all = compute_metrics(y_test, y_pred_test)
@@ -255,14 +259,14 @@ mse, mae, r2, mse_all, mae_all, r2_all = compute_metrics(y_test, y_pred_test)
 # make plot title
 plot_title = 'Epochs = '+str(G.EPOCHS)+', pred_days = '+str(G.PRED_SIZE)+'\n Layers = '+str(G.LAYERS)+', Width = '+str(G.GRU_WIDTH)+', Learning_rate = '+str(G.LEARNING_RATE)+', Dropout = '+str(G.DROPOUT)+'\n MSE = '+str(mse_all)+', MAE = '+str(mae_all)
 
-if not os.path.exists('gru_sm/predictions/'+save_title):
-   os.makedirs('gru_sm/predictions/'+save_title)
+if not os.path.exists('gru_abs_in/predictions/'+save_title):
+   os.makedirs('gru_abs_in/predictions/'+save_title)
 
-if not os.path.exists('gru_sm/model/'+save_title):
-   os.makedirs('gru_sm/model/'+save_title)
+if not os.path.exists('gru_abs_in/model/'+save_title):
+   os.makedirs('gru_abs_in/model/'+save_title)
 
 model.compile()
-model.save('gru_sm/model/'+save_title)
+model.save('gru_abs_in/model/'+save_title)
 
 X_plot_test = np.arange(0,len(y_test))
 error_plot_test = np.arange(1,G.PRED_SIZE+1)
@@ -276,7 +280,7 @@ plt.xlabel('epoch', fontsize=14)
 plt.ylabel('loss', fontsize=14)
 plt.legend(fontsize=14)
 plt.title(plot_title)
-plt.savefig('gru_sm/loss_history/loss'+save_title+'.png')
+plt.savefig('gru_abs_in/loss_history/loss'+save_title+'.png')
 plt.close()
 
 for i in range(G.PRED_SIZE):
@@ -287,7 +291,7 @@ for i in range(G.PRED_SIZE):
     plt.xlabel('Time')
     plt.ylabel('Soil moisture (normalized)')
     plt.title('Soil moisture - day '+str(i+1)+'\n'+plot_title)
-    plt.savefig('gru_sm/predictions/'+save_title+'/test_day_'+str(i+1)+'.png')
+    plt.savefig('gru_abs_in/predictions/'+save_title+'/test_day_'+str(i+1)+'.png')
     plt.close()
 
 fig, ax1 = plt.subplots(figsize=(10,5))
@@ -302,7 +306,7 @@ ax1.set_xlabel('Day')
 ax1.set_ylabel('Error')
 ax2.set_ylabel('R2', color='red')
 plt.title('Error '+plot_title)
-plt.savefig('gru_sm/predictions/'+save_title+'/test_error.png')
+plt.savefig('gru_abs_in/predictions/'+save_title+'/test_error.png')
 plt.close()
 
 breakpoint()
