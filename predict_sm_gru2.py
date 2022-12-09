@@ -24,7 +24,7 @@ class G:
     SPLIT_FRAC = 0.85
     SHUFFLE_BUFFER = 20
     BATCH_SIZE = 30
-    GRU_WIDTH = 128
+    GRU_WIDTH = 64
     LEARNING_RATE = 1e-4
     EPOCHS = 200
     DROPOUT = 0.3
@@ -112,7 +112,7 @@ def data_batch(X, y, shuffle_buffer, batch_size):
 # model architecture
 def create_model():
 
-    inputs = keras.Input(shape=((G.WINDOW_SIZE+G.PRED_SIZE), 3))
+    inputs = keras.Input(shape=((G.WINDOW_SIZE+G.PRED_SIZE), 6))
     x = keras.layers.GRU(G.GRU_WIDTH, dropout=G.DROPOUT, return_sequences=True)(inputs)
     x = keras.layers.GRU(G.GRU_WIDTH, dropout=G.DROPOUT, return_sequences=True)(x)
     x = keras.layers.GRU(G.GRU_WIDTH, dropout=G.DROPOUT, return_sequences=True)(x)
